@@ -2034,7 +2034,7 @@ cycle5:           if(cnt_timeout_stop>=(270000))
            
            
            LUFT=((S_six-Ssix)-(S_nine-S_three));// 0.03-0.15
-           LUFT_1=((S_three-Ssix));
+           //LUFT_1=((S_three-Ssix));
           // LUFT=((Ssix));
            pribor_stop=false;
            pribor_begin_go=false;
