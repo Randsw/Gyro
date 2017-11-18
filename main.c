@@ -1562,7 +1562,7 @@ delay_ms(1000);
   init_l3g4200d();
   delay_ms(1000);
   Who_Am_I = Read_Max21000_reg(Who_am_I);
-  if (Who_Am_I != 0xD3)
+  if (Who_Am_I != 0xD7) //d3 for 4200
   {
     izmeryat_nelzya();
     delay_ms(2000);
@@ -1711,7 +1711,7 @@ while (1)
 	  #ifdef Max21000
 	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+80))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-80)))//Rand
 	  #else
-	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+250))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-250)))//Rand
+	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+300))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-300)))//Rand
 	  #endif
        {   
                    
@@ -1737,7 +1737,7 @@ while (1)
 	#ifdef Max21000    
        if(CURRENT_VELOCITY>(NULL_VELOCITY+80))// RAND
        #else
-       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+250)))
+       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+300)))
        #endif
        {     
          cnt_timeout_stop=0;  
@@ -1880,7 +1880,7 @@ cycle2:     if(reset==false)
         #ifdef Max21000  	
        if(CURRENT_VELOCITY<(NULL_VELOCITY-80))  //RAND 
       #else
-        if(CURRENT_VELOCITY<(NULL_VELOCITY-250))  //RAND 
+        if(CURRENT_VELOCITY<(NULL_VELOCITY-300))  //RAND 
       #endif    
        { 
           cnt_timeout_stop=0;
