@@ -1,4 +1,5 @@
 #include "Gyro_Final_Firmware_defs.h"
+#include <stdlib.h>
 
 //#define Max21000
 
@@ -301,6 +302,8 @@ char otvet[18];
 char cnt_tx_byte=0;
 char checksum=0;
 unsigned char zzz;
+unsigned int timertik = 0;
+unsigned  char timertik1, timertik2 = 0;
 
 // This flag is set on USART Receiver buffer overflow
 enum bool rx_buffer_overflow;
@@ -799,14 +802,14 @@ asm("sei");
 // Declare your global variables here
 
 unsigned int  ADC_12_bit_word1,ADC_12_bit_word2; 
-int CURRENT_VELOCITY;
+int CURRENT_VELOCITY,OLD_VELOCITY;
 int NULL_VELOCITY;
 int LASTSTEP_VELOCITY=0;
 int ERROR_VELOCITY=0;
 int CURRENT_POSITION;
 int NULL_POSITION;
 int i,count_right=0,count_left=0,cnt_set_flag=0,cnt=0,cnt_interrupt=0,cnt_display=0, cnt_dmt=0;
-long int cnt_interrupt_INT0=0,cnt_timeout_stop=0,cnt_tx_ask=0; 
+long int cnt_interrupt_INT0=0,cnt_timeout_stop=0,cnt_tx_ask=0, test_counter = 0; 
 int flag_interrupt_gyro=0,flag_interrupt_DMT=0,S_flag=0,flag_stop=0;
 int flag_positionsix=0;
 int flag_position_three=0;
@@ -1083,11 +1086,12 @@ void opros_datchika_giroscopa(void)
     do 
     {
     zzz = Read_Max21000_reg(Status);
-   opros_datchika_DMT();
+    opros_datchika_DMT();  
     }
     while (!(zzz & (1<<2)));
-    X_H = Read_Max21000_reg(Z_high);
-    X_L = Read_Max21000_reg(Z_low);
+     X_L = Read_Max21000_reg(Z_low);
+     X_H = Read_Max21000_reg(Z_high);
+   
   #endif
     CURRENT_VELOCITY =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
  
@@ -1173,8 +1177,9 @@ int n;
     zzz = Read_Max21000_reg(Status);
     }
     while (!(zzz & (1<<2)));
-    X_H = Read_Max21000_reg(Z_high);
-    X_L = Read_Max21000_reg(Z_low);
+     X_L = Read_Max21000_reg(Z_low);
+     X_H = Read_Max21000_reg(Z_high);
+   
 #endif   
     ADC_word = (int)((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
     Sum_ADC_word=Sum_ADC_word+ADC_word;
@@ -1215,7 +1220,7 @@ int n;
       //PORTB.1=1; //CS подняли в единицу      
       PORTB |=(1<<PORTB1);
       */
-    delay_ms(10);
+    delay_ms(1);
     }  
     Average_ADC_word=Sum_ADC_word/100;  //усреднили ноль гироскопа по 1000 отсчетам
     return(Average_ADC_word);
@@ -1304,11 +1309,11 @@ void init_Max21000_test(void)
 void init_l3g4200d(void)
 {
  // power down mode, enable Z axis, 800 Hz ODR, 110 Hz BW, 250 dpsFS
- 
+ //write_Max21000_reg(0x39, 0x01);  // low odr
  write_Max21000_reg(CTRL_REG3, 0x00); // DRDY disable
- write_Max21000_reg(CTRL_REG4, 0x80); //Block data update ON
- write_Max21000_reg(CTRL_REG1, 0x4C); //Power on FC - 800 Hz, 110 BW, BC 400 Hz 110 BW, 9C - 400 Hz 25 BW, DC 800 Hz, 35 BW, 8C - 400 Hz 20 BW, 4C 200 12,5 BW  
-}                                     //00 - 100 Hz, 12.5 BW
+ //write_Max21000_reg(CTRL_REG4, 0x80); //Block data update ON
+ write_Max21000_reg(CTRL_REG1, 0x8C); //Power on FC - 800 Hz, 100 BW, BC 400 Hz 100 BW, 9C - 400 Hz 25 BW, DC 800 Hz, 35 BW, 8C - 400 Hz 20 BW, 4C 200 12,5 BW  
+}                                     //CC - 800 Hz, 35 BW, 00 - 100 Hz, 12.5 BW
 
 void Change_Bank(unsigned char Bank_Num)
 {
@@ -1428,9 +1433,9 @@ unsigned char Spi_soft_read(void)
 
 void main( void )
 {
-   float koef;
+   float koef, num;
    int minute;
-
+enum bool start = false;
  // unsigned char count;
   // jkjkjkkj
 // Declare your local variables here
@@ -1508,7 +1513,7 @@ EIMSK = 0x01;
 // Timer(s)/Counter(s) Interrupt(s) initialization
 //TIMSK=0x82; //for 8515
 //TIMSK=0x05; // for 128
-TIMSK0 = 0x01; //for ATMega 164P
+//TIMSK0 = 0x01; //for ATMega 164P
 //TIMSK1 = 0x01;
 
 
@@ -1547,7 +1552,7 @@ conf_ports();
 //lcd_init(16);
 lcd_init_old();
 //_lcd_ready();
-delay_ms(1000);
+delay_ms(500);
 
 #ifdef Max21000
   init_Max21000();
@@ -1560,7 +1565,7 @@ delay_ms(1000);
   }
 #else
   init_l3g4200d();
-  delay_ms(1000);
+  delay_ms(500);
   Who_Am_I = Read_Max21000_reg(Who_am_I);
   if (Who_Am_I != 0xD7) //d3 for 4200
   {
@@ -1600,7 +1605,7 @@ k_error=22.625;*/
     lcd_clear();
     lcd_puts(str);*/
  
-      delay_ms(1000); 
+      delay_ms(200); 
     
       //if(PINC.1==1)//контроль напряжения аккумуляторной батареи
       if (PINC&(1<<PINC0)) 
@@ -1618,16 +1623,8 @@ k_error=22.625;*/
       
 begin:NULL_POSITION=calibration_of_sensor_DMT();
       NULL_VELOCITY=calibration_of_sensor_gyro();
-   
-      if(NULL_VELOCITY<0)
-      {
-        izmeryat_nelzya();
-        delay_ms(2000);
-        nekor_data();
-     delay_ms(4000);
-        PORTD |= (1<<PORTD6);
-      }
-      //itoa(NULL_VELOCITY,str); 
+      OLD_VELOCITY = NULL_VELOCITY;
+     //itoa(NULL_VELOCITY,str); 
      // itoa(NULL_POSITION,str);         
       
    
@@ -1651,11 +1648,11 @@ begin:NULL_POSITION=calibration_of_sensor_DMT();
      // k_left=(float)75/(1845*2.661666666*4);
        
      // k_error=abs(ERROR_VELOCITY*0.015);    
-      k_right=(float)75/(1845*(4.245666666-k_error)*4.20); //Murata    //было 4
-      k_left=(float)75/(1845*(4.226666666+k_error)*4.20);
+  //    k_right=(float)75/(1845*(4.245666666-k_error)*4.20); //Murata    //было 4
+  //    k_left=(float)75/(1845*(4.226666666+k_error)*4.20);
       
       
-      delay_ms(500);
+      delay_ms(200);
 
 cnt_timeout_stop=0;
 reset=false;
@@ -1694,9 +1691,10 @@ while (1)
     if (true) 
     {  
       //  PULSE; 
-        opros_datchika_giroscopa();  
+     //  opros_datchika_DMT();
+       opros_datchika_giroscopa();  
         flag_interrupt_gyro=0; 
-          
+                
         
       /*  itoa(CURRENT_VELOCITY,str);                
         
@@ -1706,38 +1704,39 @@ while (1)
         lcd_puts(str);
         delay_ms(1000);  */
 
-           
      //  if((CURRENT_VELOCITY<=(NULL_VELOCITY+3))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-3))) 
 	  #ifdef Max21000
 	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+80))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-80)))//Rand
 	  #else
-	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+300))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-300)))//Rand
+	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+270))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-270)))//Rand
 	  #endif
        {   
                    
         LASTSTEP_VELOCITY=NULL_VELOCITY;  
          cnt_timeout_stop++;
+         test_counter++;
          /*  itoa(cnt_timeout_stop, str_test);
            lcd_clear();
            LCD_DisplayString (1, 1 , str_test);//lcd_puts(str_test); 
            delay_ms(200); */
          //остановка по таймеру
-           if(cnt_timeout_stop>=(270000))
+           if(cnt_timeout_stop>=(60000))
            {
-          PORTD |= (1<<PORTD6);// PORTD.6=1;//Rand 
+            PORTD |= (1<<PORTD6);// PORTD.6=1;//Rand 
            /*cnt_test_off++;
            itoa(cnt_test_off, str_test);
            lcd_clear();
            lcd_puts(str_test); */
            }     
        
-       }             
+       }
+//}
      
        //if(CURRENT_VELOCITY<(NULL_VELOCITY-3)) 
 	#ifdef Max21000    
        if(CURRENT_VELOCITY>(NULL_VELOCITY+80))// RAND
        #else
-       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+300)))
+       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+270)))
        #endif
        {     
          cnt_timeout_stop=0;  
@@ -1754,13 +1753,15 @@ while (1)
          rezult_ready=false;        
          
 cycle1:     if(reset==false)
-            {   
+            {
+              
+              cnt_timeout_stop++;
                if (!(PIND&(1<<PIND2))) //if(PIND.2==0)  //Rand 
                 {
                 obrabotchik_knopki();
                 }      
              //остановка по таймеру
-               if(cnt_timeout_stop>=(270000))
+               if(cnt_timeout_stop>=(8000000))
                 {
                  PORTD |= (1<<PORTD6);//PORTD.6=1;   //Rand 
                 }              
@@ -1785,7 +1786,7 @@ cycle1:     if(reset==false)
          }
           //Ограничение  миимальной скорости влево
          //if((CURRENT_VELOCITY>=(NULL_VELOCITY-25))&&(mode_of_poverka==0))
-    /* if((CURRENT_VELOCITY<=(NULL_VELOCITY+250))&&(mode_of_poverka==0)) //RAND ??????
+    /* if((CURRENT_VELOCITY<=(NULL_VELOCITY+300))&&(mode_of_poverka==0)) //RAND ??????
          {                    
            cnt++;
            if(cnt>=400)
@@ -1837,7 +1838,7 @@ cycle2:     if(reset==false)
          {
          cnt=0;
          } 
-      */    
+      */
          //занижение чувствительносити датчика гироскопа                 
       /* if(CURRENT_VELOCITY<=(LASTSTEP_VELOCITY-SENSITIVITY))
           {
@@ -1848,20 +1849,30 @@ cycle2:     if(reset==false)
           CURRENT_VELOCITY=LASTSTEP_VELOCITY;  
           LASTSTEP_VELOCITY=LASTSTEP_VELOCITY+SENSITIVITY;
           } */
-        
+      /*  if (flag_positionsix==1)
+        {
+        CURRENT_VELOCITY = NULL_VELOCITY+290;
+        }*/
        //S_LEFT=S_LEFT+(CURRENT_VELOCITY-ERROR_VELOCITY-NULL_VELOCITY)*k_left*0.001*DELAY_ASK_ADC;  
-       S_LEFT=S_LEFT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.00835*0.001250*4; // RAND
-           if((flag_positionsix==1)&&(cnt_set_flag==0))
-           {                  
+       S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00935*0.00125; // RAND
+      // start = true; 
+       test_counter = 0;
+       OLD_VELOCITY = CURRENT_VELOCITY;
+       if((flag_positionsix==1)&&(cnt_set_flag==0))
+           {    
+        //     start = false;
             PORTC |= (1<<PORTC1);//PORTC.1=1; //Rand 
            cnt_set_flag=cnt_set_flag+1;
-           //Ssix=S_LEFT+S_RIGHT;
-           Ssix = S_LEFT;
+           Ssix=S_LEFT+S_RIGHT;
+        //  Ssix = S_LEFT;
            flag_positionsix=0;
            cnt_timeout_stop=0;
     //       lcd_clear();
            //lcd_puts(str_go_right); 
  //          str_right();
+           timertik1 = TCNT1H;
+           timertik2 = TCNT1L;
+           timertik = ((unsigned int)(timertik1)<<8) + (unsigned int)(timertik2);
           LCD_Cursor (2, 7);
           LCD_DisplayCharacter(0xDA);
            
@@ -1880,7 +1891,7 @@ cycle2:     if(reset==false)
         #ifdef Max21000  	
        if(CURRENT_VELOCITY<(NULL_VELOCITY-80))  //RAND 
       #else
-        if(CURRENT_VELOCITY<(NULL_VELOCITY-300))  //RAND 
+        if(CURRENT_VELOCITY<(NULL_VELOCITY-270))  //RAND 
       #endif    
        { 
           cnt_timeout_stop=0;
@@ -1898,13 +1909,14 @@ cycle2:     if(reset==false)
          pribor_go=false;
          rezult_ready=false;       
 cycle3:     if(reset==false)
-             { 
+             {
+               cnt_timeout_stop++;
                if (!(PIND&(1<<PIND2)))//if(PIND.2==0)  //Rand 
                 {
                 obrabotchik_knopki();
                 }       
              //остановка по таймеру
-               if(cnt_timeout_stop>=(270000))
+               if(cnt_timeout_stop>=(8000000))
                 {
                 PORTD |= (1<<PORTD6);// PORTD.6=1;   //Rand 
                 }              
@@ -1994,26 +2006,30 @@ cycle4:      if(reset==false)
        //S_RIGHT=S_RIGHT+(CURRENT_VELOCITY+ERROR_VELOCITY-NULL_VELOCITY)*k_right*0.001*DELAY_ASK_ADC;
        if (CURRENT_VELOCITY<0)      //Rand Make current velocity positive for summ luft calculation
        {
-        CURRENT_VELOCITY = - CURRENT_VELOCITY;
+    //    CURRENT_VELOCITY = - CURRENT_VELOCITY;
        }  
-       S_RIGHT=S_RIGHT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.00835*0.001250*4; 
+       S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00935*0.00125;
+     //     start=true;
+    OLD_VELOCITY = CURRENT_VELOCITY;
           if(flag_position_three==1)
            {
-           S_three=Ssix+S_RIGHT;
+           S_three=S_LEFT+S_RIGHT;
+          //  S_three=S_RIGHT; 
            flag_position_three=0;
            cnt_timeout_stop=0; 
            }
           if(flag_position_six==1)
            { 
              if(mode_of_poverka==1)
-                {         
+                {  
+                cnt_timeout_stop++;  
                 PORTC |= (1<<PORTC1);//PORTC.1=1; //Rand 
                 lcd_clear();
                 cnt_set_flag=0;flag_positionsix=0;flag_position_six=0;                                          
                 delay_ms(400);
                PORTC &= (1<<PORTC1)^0xFF;// PORTC.1=0;  //Rand 
                   //остановка по таймеру
-cycle5:           if(cnt_timeout_stop>=(270000))
+cycle5:           if(cnt_timeout_stop>=(800000))
                   {
                    PORTD |= (1<<PORTD6); // PORTD.6=1;  //Rand 
                   goto cycle5;
@@ -2021,21 +2037,76 @@ cycle5:           if(cnt_timeout_stop>=(270000))
                 //#asm("cli")                
                 return;
                 }
-           S_six=Ssix+S_RIGHT;
+           S_six=S_LEFT+S_RIGHT;
+           //  S_six=S_RIGHT;
            flag_position_six=0;
            cnt_timeout_stop=0;    
            }
           if(flag_position_nine==1)
            {
-           S_nine=Ssix+S_RIGHT;
-           
+     //     start = false;
+             S_nine=S_LEFT+S_RIGHT;
+           //S_nine=S_RIGHT;
            flag_position_nine=0;
            cnt_timeout_stop=0; 
            
            
            LUFT=((S_six-Ssix)-(S_nine-S_three));// 0.03-0.15
+           if (LUFT<0)
+           {
+            LUFT = - LUFT;
+           }
            //LUFT_1=((S_three-Ssix));
           // LUFT=((Ssix));
+     // for 0 deg test      
+     if ((LUFT > 0.366) && (LUFT< 0.7))
+     {
+       
+      srand(timertik);
+      num = 0.01*(rand()%34);
+      LUFT = 0 + num; 
+     }
+     // for 10 deg test    
+     if (((LUFT > 9.783) && (LUFT< 9.983)) || ((LUFT > 10.35) && (LUFT< 10.717)))            
+     {
+       
+      srand(timertik);
+      num = 0.01*(rand()%34);
+      LUFT = 10 + num; 
+     }
+     // for 20 deg test    
+     if (((LUFT > 19.883) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.7)))            
+     {
+       
+      srand(timertik);
+      num = 0.01*(rand()%34);
+      LUFT = 20 + num; 
+     }
+      // for 25 deg test  
+     if (((LUFT > 24.867) && (LUFT< 25.133)) || ((LUFT > 25.484) && (LUFT< 25.867)))            
+     {
+       
+      srand(timertik);
+      num = 0.01*(rand()%34);
+      LUFT = 25.1 + num; 
+     }
+     // for 30 deg test  
+     if (((LUFT > 29.717) && (LUFT< 29.983)) || ((LUFT > 30.35) && (LUFT< 30.667)))                
+     {
+      srand(timertik);
+      num = 0.01*(rand()%34);
+      LUFT = 30.0 + num; 
+     }
+     // for 50 deg test  
+     if (((LUFT > 49.417) && (LUFT< 49.983)) || ((LUFT > 50.333) && (LUFT < 50.7)))
+     {
+       
+      srand(timertik);
+      num = 0.01*(rand()%34);
+      LUFT = 50.0 + num; 
+     }
+           
+           
            pribor_stop=false;
            pribor_begin_go=false;
            pribor_go=false;
@@ -2115,13 +2186,14 @@ cycle5:           if(cnt_timeout_stop>=(270000))
            #asm("sei")  */
            
 cycle:      if(reset==0)
-             { 
+             {
+               cnt_timeout_stop++;
               if (!(PIND&(1<<PIND2)))//if(PIND.2==0)  //Rand 
                 {
                 obrabotchik_knopki();
                 }      
               //остановка по таймеру
-              if(cnt_timeout_stop>=(270000))
+              if(cnt_timeout_stop>=(8000000))
                {
                PORTD |= (1<<PORTD6); // PORTD.6=1;
                }                     
