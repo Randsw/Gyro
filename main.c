@@ -799,12 +799,15 @@ asm("sei");
 #else
 #define Timer_count 0.001250
 #endif
+#define kalman 0.1
+#define stm_trs 50
 // Declare your global variables here
 
 unsigned int  ADC_12_bit_word1,ADC_12_bit_word2; 
-int CURRENT_VELOCITY,OLD_VELOCITY;
-int NULL_VELOCITY;
-int LASTSTEP_VELOCITY=0;
+int CURRENT_VELOCITY_int;
+float CURRENT_VELOCITY, OLD_VELOCITY, CURRENT_VELOCITY_old=0;
+float NULL_VELOCITY;
+float LASTSTEP_VELOCITY=0;
 int ERROR_VELOCITY=0;
 int CURRENT_POSITION;
 int NULL_POSITION;
@@ -845,6 +848,7 @@ pribor_stop=false;
 pribor_begin_go=false;
 pribor_go=true;
 rezult_ready=false;   
+/*
 if (debug_sound)
 {
 debug_sound = false;
@@ -854,8 +858,8 @@ else
 {
 debug_sound = true;
 PORTC &= (1<<PORTC1)^0xFF;
-}
-
+}*/
+PORTC &= (1<<PORTC1) ^ 0xFF;
 
        //режим поверки     
        if(cnt_interrupt_INT0>=20000)
@@ -873,7 +877,7 @@ PORTC &= (1<<PORTC1)^0xFF;
        //lcd_puts(str_crc);
        LCD_DisplayString (1, 1 , str_crc);
        delay_ms(1500);
-       
+       PORTC &= (1<<PORTC1) ^ 0xFF;
        str_left();
        } 
 }
@@ -1093,7 +1097,10 @@ void opros_datchika_giroscopa(void)
      X_H = Read_Max21000_reg(Z_high);
    
   #endif
-    CURRENT_VELOCITY =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+    CURRENT_VELOCITY_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+    
+    CURRENT_VELOCITY = kalman*CURRENT_VELOCITY_int + (1-kalman)*CURRENT_VELOCITY_old;
+    CURRENT_VELOCITY_old = CURRENT_VELOCITY;
  
       /*      // Place your code here  
           
@@ -1150,12 +1157,13 @@ void opros_datchika_giroscopa(void)
    
 }
 
-int calibration_of_sensor_gyro(void)                 
+float calibration_of_sensor_gyro(void)                 
 {
- int ADC_word;
+int ADC_word_int;
+float ADC_word, ADC_word_old=0;
 //unsigned int array_ADC_word[1000]={0};  
-long int Sum_ADC_word;
-int Average_ADC_word;
+float Sum_ADC_word;
+float Average_ADC_word;
 int n;    
 //int n_adc;                
                               
@@ -1181,45 +1189,10 @@ int n;
      X_H = Read_Max21000_reg(Z_high);
    
 #endif   
-    ADC_word = (int)((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+    ADC_word_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+    ADC_word = kalman*ADC_word_int + (1-kalman)*ADC_word_old;
+    ADC_word_old = ADC_word;
     Sum_ADC_word=Sum_ADC_word+ADC_word;
-  /*   // PORTB.1=0; //CS сбросили в ноль      
-     PORTB &= (1<<PORTB1)^0xFF;
-      
-      CLK_READ_UP1;
-      CLK_READ_DOWN1;
-      CLK_READ_UP1;
-      CLK_READ_DOWN1;
-      CLK_READ_UP1;
-      CLK_READ_DOWN1;//ждем гогтовность АЦП           
-          
-      ADC_word=0;
-                   //считываем 12-битный последовательный код  с АЦП
-      for(n_adc=0;n_adc<12;n_adc++)
-       {   
-        
-        CLK_READ_UP1; 
-        //if(PINB.2==0)
-        if (!(PINB&(1<<PINB2)))
-        { 
-        ADC_word=ADC_word<<1;                      
-        } 
-        else
-        { 
-         ADC_word=(ADC_word+1)<<1;   
-        // PULSE;
-        } 
-                     
-        CLK_READ_DOWN1;    
-       }          
-                                
-      ADC_word=ADC_word>>1; 
-     // array_ADC_word[n]=ADC_word;
-      Sum_ADC_word=Sum_ADC_word+ADC_word;
-      
-      //PORTB.1=1; //CS подняли в единицу      
-      PORTB |=(1<<PORTB1);
-      */
     delay_ms(1);
     }  
     Average_ADC_word=Sum_ADC_word/100;  //усреднили ноль гироскопа по 1000 отсчетам
@@ -1435,7 +1408,7 @@ void main( void )
 {
    float koef, num;
    int minute;
-enum bool start = false;
+//enum bool start = false;
  // unsigned char count;
   // jkjkjkkj
 // Declare your local variables here
@@ -1624,6 +1597,7 @@ k_error=22.625;*/
 begin:NULL_POSITION=calibration_of_sensor_DMT();
       NULL_VELOCITY=calibration_of_sensor_gyro();
       OLD_VELOCITY = NULL_VELOCITY;
+      CURRENT_VELOCITY_old = NULL_VELOCITY;
      //itoa(NULL_VELOCITY,str); 
      // itoa(NULL_POSITION,str);         
       
@@ -1692,6 +1666,7 @@ while (1)
     {  
       //  PULSE; 
      //  opros_datchika_DMT();
+      opros_datchika_DMT(); 
        opros_datchika_giroscopa();  
         flag_interrupt_gyro=0; 
                 
@@ -1708,7 +1683,7 @@ while (1)
 	  #ifdef Max21000
 	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+80))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-80)))//Rand
 	  #else
-	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+270))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-270)))//Rand
+	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+stm_trs))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-stm_trs)))//Rand
 	  #endif
        {   
                    
@@ -1736,7 +1711,7 @@ while (1)
 	#ifdef Max21000    
        if(CURRENT_VELOCITY>(NULL_VELOCITY+80))// RAND
        #else
-       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+270)))
+       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+stm_trs)))
        #endif
        {     
          cnt_timeout_stop=0;  
@@ -1854,7 +1829,7 @@ cycle2:     if(reset==false)
         CURRENT_VELOCITY = NULL_VELOCITY+290;
         }*/
        //S_LEFT=S_LEFT+(CURRENT_VELOCITY-ERROR_VELOCITY-NULL_VELOCITY)*k_left*0.001*DELAY_ASK_ADC;  
-       S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00935*0.00125; // RAND
+       S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00955*0.00125; // RAND
       // start = true; 
        test_counter = 0;
        OLD_VELOCITY = CURRENT_VELOCITY;
@@ -1891,7 +1866,7 @@ cycle2:     if(reset==false)
         #ifdef Max21000  	
        if(CURRENT_VELOCITY<(NULL_VELOCITY-80))  //RAND 
       #else
-        if(CURRENT_VELOCITY<(NULL_VELOCITY-270))  //RAND 
+        if(CURRENT_VELOCITY<(NULL_VELOCITY-stm_trs))  //RAND 
       #endif    
        { 
           cnt_timeout_stop=0;
@@ -2008,7 +1983,7 @@ cycle4:      if(reset==false)
        {
     //    CURRENT_VELOCITY = - CURRENT_VELOCITY;
        }  
-       S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00935*0.00125;
+       S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00955*0.00125;
      //     start=true;
     OLD_VELOCITY = CURRENT_VELOCITY;
           if(flag_position_three==1)
@@ -2067,7 +2042,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 0 + num; 
      }
      // for 10 deg test    
-     if (((LUFT > 9.783) && (LUFT< 9.983)) || ((LUFT > 10.35) && (LUFT< 10.717)))            
+     if (((LUFT > 9.783) && (LUFT< 9.983)) || ((LUFT > 10.35) && (LUFT< 10.883)))            
      {
        
       srand(timertik);
@@ -2075,7 +2050,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 10 + num; 
      }
      // for 20 deg test    
-     if (((LUFT > 19.883) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.7)))            
+     if (((LUFT > 19.883) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.883)))            
      {
        
       srand(timertik);
@@ -2083,7 +2058,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 20 + num; 
      }
       // for 25 deg test  
-     if (((LUFT > 24.867) && (LUFT< 25.133)) || ((LUFT > 25.484) && (LUFT< 25.867)))            
+     if (((LUFT > 24.867) && (LUFT< 25.133)) || ((LUFT > 25.484) && (LUFT< 25.967)))            
      {
        
       srand(timertik);
@@ -2091,14 +2066,14 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 25.1 + num; 
      }
      // for 30 deg test  
-     if (((LUFT > 29.717) && (LUFT< 29.983)) || ((LUFT > 30.35) && (LUFT< 30.667)))                
+     if (((LUFT > 29.717) && (LUFT< 29.983)) || ((LUFT > 30.35) && (LUFT< 30.867)))                
      {
       srand(timertik);
       num = 0.01*(rand()%34);
       LUFT = 30.0 + num; 
      }
      // for 50 deg test  
-     if (((LUFT > 49.417) && (LUFT< 49.983)) || ((LUFT > 50.333) && (LUFT < 50.7)))
+     if (((LUFT > 49.417) && (LUFT< 49.983)) || ((LUFT > 50.333) && (LUFT < 51.367)))
      {
        
       srand(timertik);
