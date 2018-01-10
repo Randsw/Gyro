@@ -800,7 +800,8 @@ asm("sei");
 #define Timer_count 0.001250
 #endif
 #define kalman 0.1
-#define stm_trs 50
+#define stm_trs 10
+#define stm_slow_trs 50
 // Declare your global variables here
 
 unsigned int  ADC_12_bit_word1,ADC_12_bit_word2; 
@@ -1540,8 +1541,13 @@ delay_ms(500);
   init_l3g4200d();
   delay_ms(500);
   Who_Am_I = Read_Max21000_reg(Who_am_I);
-  if (Who_Am_I != 0xD7) //d3 for 4200
+  if ((Who_Am_I == 0xD7) || (Who_Am_I == 0xD3)) //d3 for 4200
   {
+    asm("nop");
+  }
+  else
+  {
+  
     izmeryat_nelzya();
     delay_ms(2000);
     PORTD |= (1<<PORTD6);
@@ -1598,7 +1604,8 @@ begin:NULL_POSITION=calibration_of_sensor_DMT();
       NULL_VELOCITY=calibration_of_sensor_gyro();
       OLD_VELOCITY = NULL_VELOCITY;
       CURRENT_VELOCITY_old = NULL_VELOCITY;
-     //itoa(NULL_VELOCITY,str); 
+     cnt = 0;
+      //itoa(NULL_VELOCITY,str); 
      // itoa(NULL_POSITION,str);         
       
    
@@ -1761,10 +1768,10 @@ cycle1:     if(reset==false)
          }
           //ќграничение  миимальной скорости влево
          //if((CURRENT_VELOCITY>=(NULL_VELOCITY-25))&&(mode_of_poverka==0))
-    /* if((CURRENT_VELOCITY<=(NULL_VELOCITY+300))&&(mode_of_poverka==0)) //RAND ??????
+     if((CURRENT_VELOCITY<=(NULL_VELOCITY+stm_slow_trs))&&(mode_of_poverka==0)) //RAND ??????
          {                    
            cnt++;
-           if(cnt>=400)
+           if(cnt>=4000)
           // if(cnt>=500)
            {
             vrashay_bystree();
@@ -1813,7 +1820,7 @@ cycle2:     if(reset==false)
          {
          cnt=0;
          } 
-      */
+      
          //занижение чувствительносити датчика гироскопа                 
       /* if(CURRENT_VELOCITY<=(LASTSTEP_VELOCITY-SENSITIVITY))
           {
@@ -1918,10 +1925,10 @@ cycle3:     if(reset==false)
                       
          //ќграничение  миимальной скорости вправо
         // if((CURRENT_VELOCITY<=(NULL_VELOCITY+25))&&(mode_of_poverka==0))
-	/*if((CURRENT_VELOCITY>=(NULL_VELOCITY-350))&&(mode_of_poverka==0))	//RAND ????
+	if((CURRENT_VELOCITY>=(NULL_VELOCITY-stm_slow_trs))&&(mode_of_poverka==0))	//RAND ????
          {                    
            cnt++;
-           if(cnt>=400)
+           if(cnt>=4000)
             {
            
             vrashay_bystree();
@@ -1966,7 +1973,7 @@ cycle4:      if(reset==false)
          {
          cnt=0;
          }  
-          */
+          
         //занижение чувствительносити датчика гироскопа                 
        /*  if(CURRENT_VELOCITY>=(LASTSTEP_VELOCITY+SENSITIVITY))
           {
@@ -2050,7 +2057,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 10 + num; 
      }
      // for 20 deg test    
-     if (((LUFT > 19.883) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.883)))            
+     if (((LUFT > 19.783) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.883)))            
      {
        
       srand(timertik);
