@@ -14,7 +14,7 @@ void  conf_ports(void)
   DDRC = 0x12;
   PORTC = 0x00;
 
-  DDRD = 0x7A;
+  DDRD = 0x7A; //4a//7a
   PORTD = 0x08;
 
   //DDRE = 0x9F;

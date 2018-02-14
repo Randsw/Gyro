@@ -2,7 +2,7 @@
 #define ENABLE_BIT_DEFINITIONS
 #endif
 
-#include "iom164p.h"
+#include "iom164pa.h"
 #include "intrinsics.h"
 #include "MAX21000.h"
 #include "MAX21000_map.h"
@@ -27,6 +27,7 @@
 #define CTRL_REG3 0x22
 #define CTRL_REG4 0x23
 #define Who_am_I  0x0F
+#define Temp_reg  0x26
 #define Z_low     0x2C
 #define Z_high    0x2D
 #define Status    0x27

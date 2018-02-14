@@ -2,7 +2,9 @@
 #include <stdlib.h>
 
 //#define Max21000
-
+//#define Corr
+//#define temp_corr
+#define new_temp_corr
 const unsigned char LCD_CODE[] = {					
 	0X41,
 	0XA0,
@@ -802,8 +804,11 @@ asm("sei");
 #define kalman 0.1
 #define stm_trs 10
 #define stm_slow_trs 50
+#define temp_room 7
+#define temp_coeff 10 // in digits
 // Declare your global variables here
 
+char temp;
 unsigned int  ADC_12_bit_word1,ADC_12_bit_word2; 
 int CURRENT_VELOCITY_int;
 float CURRENT_VELOCITY, OLD_VELOCITY, CURRENT_VELOCITY_old=0;
@@ -1099,7 +1104,13 @@ void opros_datchika_giroscopa(void)
    
   #endif
     CURRENT_VELOCITY_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
-    
+#ifdef new_temp_corr
+      temp = Read_Max21000_reg(Temp_reg);
+//    if ((temp > temp_room + 2) || (temp < temp_room -2))
+  //  {
+    CURRENT_VELOCITY_int -= temp_coeff*(temp - temp_room); 
+   // }
+#endif
     CURRENT_VELOCITY = kalman*CURRENT_VELOCITY_int + (1-kalman)*CURRENT_VELOCITY_old;
     CURRENT_VELOCITY_old = CURRENT_VELOCITY;
  
@@ -1191,6 +1202,13 @@ int n;
    
 #endif   
     ADC_word_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+#ifdef new_temp_corr
+    temp = Read_Max21000_reg(Temp_reg);
+    // if ((temp > temp_room + 2) || (temp < temp_room -2))
+   // {
+    ADC_word_int -= temp_coeff*(temp - temp_room);
+   // }
+#endif
     ADC_word = kalman*ADC_word_int + (1-kalman)*ADC_word_old;
     ADC_word_old = ADC_word;
     Sum_ADC_word=Sum_ADC_word+ADC_word;
@@ -1287,6 +1305,7 @@ void init_l3g4200d(void)
  write_Max21000_reg(CTRL_REG3, 0x00); // DRDY disable
  //write_Max21000_reg(CTRL_REG4, 0x80); //Block data update ON
  write_Max21000_reg(CTRL_REG1, 0x8C); //Power on FC - 800 Hz, 100 BW, BC 400 Hz 100 BW, 9C - 400 Hz 25 BW, DC 800 Hz, 35 BW, 8C - 400 Hz 20 BW, 4C 200 12,5 BW  
+// write_Max21000_reg(CTRL_REG4,0x06);
 }                                     //CC - 800 Hz, 35 BW, 00 - 100 Hz, 12.5 BW
 
 void Change_Bank(unsigned char Bank_Num)
@@ -1409,7 +1428,8 @@ void main( void )
 {
    float koef, num;
    int minute;
-//enum bool start = false;
+ 
+   //enum bool start = false;
  // unsigned char count;
   // jkjkjkkj
 // Declare your local variables here
@@ -1517,12 +1537,14 @@ ACSR=0x80;
 kalib = ee_kalib;
 
 //koef =((float)(kalib))/1000000; 
-koef = 0.00875;
+koef = 0.00940; //first
+//koef = 0.00855; //second
 pribor_stop=false;
 pribor_begin_go=false;
 pribor_go=true;
 rezult_ready=false;
 conf_ports();
+//PORTC |= (1<<PORTC1); // test beep
 //lcd_init(16);
 lcd_init_old();
 //_lcd_ready();
@@ -1599,11 +1621,35 @@ k_error=22.625;*/
       // PORTC.7=1;
        PORTD |= (1<<PORTD6); 
        }
-      
+      // temp test
+lcd_clear();
+temp = Read_Max21000_reg(Temp_reg);    
+itoa(temp ,str_sum);
+LCD_DisplayString(2,3, str_sum);
+delay_ms(2000);
+
 begin:NULL_POSITION=calibration_of_sensor_DMT();
       NULL_VELOCITY=calibration_of_sensor_gyro();
-      OLD_VELOCITY = NULL_VELOCITY;
+      OLD_VELOCITY = NULL_VELOCITY; 
       CURRENT_VELOCITY_old = NULL_VELOCITY;
+/*#ifdef temp_corr
+if ((temp > 35) && (temp <=44))
+{
+koef += 0.00040;
+}
+if ((temp > 27) && (temp <=35))
+{
+koef += 0.00030;
+}
+if ((temp > 19) && (temp <= 27))
+{
+koef += 0.00020;
+}
+if ((temp > 11) && (temp <19))
+{
+koef += 0.00010;
+}
+#endif*/        
      cnt = 0;
       //itoa(NULL_VELOCITY,str); 
      // itoa(NULL_POSITION,str);         
@@ -1718,13 +1764,14 @@ while (1)
 	#ifdef Max21000    
        if(CURRENT_VELOCITY>(NULL_VELOCITY+80))// RAND
        #else
-       if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+stm_trs)))
+       //if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+stm_trs)))
+         if((CURRENT_VELOCITY>(NULL_VELOCITY+stm_trs)))
        #endif
        {     
          cnt_timeout_stop=0;  
          //Ограничение  максимальной скорости влево
         // if((CURRENT_VELOCITY<=1050)&&(mode_of_poverka==0))
-	if((CURRENT_VELOCITY>=3500)&&(mode_of_poverka==0))	//RAND ??????
+	if((CURRENT_VELOCITY>=4500)&&(mode_of_poverka==0))	//RAND ??????
          {
          vrashay_medlennee();
          delay_ms(2000);
@@ -1836,7 +1883,7 @@ cycle2:     if(reset==false)
         CURRENT_VELOCITY = NULL_VELOCITY+290;
         }*/
        //S_LEFT=S_LEFT+(CURRENT_VELOCITY-ERROR_VELOCITY-NULL_VELOCITY)*k_left*0.001*DELAY_ASK_ADC;  
-       S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00955*0.00125; // RAND
+       S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125; // RAND
       // start = true; 
        test_counter = 0;
        OLD_VELOCITY = CURRENT_VELOCITY;
@@ -1990,7 +2037,7 @@ cycle4:      if(reset==false)
        {
     //    CURRENT_VELOCITY = - CURRENT_VELOCITY;
        }  
-       S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*0.00955*0.00125;
+       S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125;
      //     start=true;
     OLD_VELOCITY = CURRENT_VELOCITY;
           if(flag_position_three==1)
@@ -2041,7 +2088,8 @@ cycle5:           if(cnt_timeout_stop>=(800000))
            //LUFT_1=((S_three-Ssix));
           // LUFT=((Ssix));
      // for 0 deg test      
-     if ((LUFT > 0.366) && (LUFT< 0.7))
+#ifdef Corr 
+   if ((LUFT > 0.366) && (LUFT< 0.7))
      {
        
       srand(timertik);
@@ -2049,7 +2097,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 0 + num; 
      }
      // for 10 deg test    
-     if (((LUFT > 9.783) && (LUFT< 9.983)) || ((LUFT > 10.35) && (LUFT< 10.883)))            
+     if (((LUFT > 9.483) && (LUFT< 9.983)) || ((LUFT > 10.35) && (LUFT< 10.783)))            
      {
        
       srand(timertik);
@@ -2057,7 +2105,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 10 + num; 
      }
      // for 20 deg test    
-     if (((LUFT > 19.783) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.883)))            
+     if (((LUFT > 19.483) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.783)))            
      {
        
       srand(timertik);
@@ -2065,29 +2113,29 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       LUFT = 20 + num; 
      }
       // for 25 deg test  
-     if (((LUFT > 24.867) && (LUFT< 25.133)) || ((LUFT > 25.484) && (LUFT< 25.967)))            
+     if (((LUFT > 24.367) && (LUFT< 24.983)) || ((LUFT > 25.367) && (LUFT< 25.867)))            
      {
        
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 25.1 + num; 
+      LUFT = 25.0 + num; 
      }
      // for 30 deg test  
-     if (((LUFT > 29.717) && (LUFT< 29.983)) || ((LUFT > 30.35) && (LUFT< 30.867)))                
+     if (((LUFT > 29.350) && (LUFT< 29.983)) || ((LUFT > 30.35) && (LUFT< 30.783)))                
      {
       srand(timertik);
       num = 0.01*(rand()%34);
       LUFT = 30.0 + num; 
      }
      // for 50 deg test  
-     if (((LUFT > 49.417) && (LUFT< 49.983)) || ((LUFT > 50.333) && (LUFT < 51.367)))
+     if (((LUFT > 49.223) && (LUFT< 49.983)) || ((LUFT > 50.333) && (LUFT < 51.567)))
      {
        
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 50.0 + num; 
+      LUFT = 50.0 + num; ////////////////////// dont forget return zero 
      }
-           
+#endif           
            
            pribor_stop=false;
            pribor_begin_go=false;
