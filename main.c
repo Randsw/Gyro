@@ -2,9 +2,10 @@
 #include <stdlib.h>
 
 //#define Max21000
-//#define Corr
+#define Corr
 //#define temp_corr
-#define new_temp_corr
+//#define new_temp_corr
+#define temp_corr_v2
 const unsigned char LCD_CODE[] = {					
 	0X41,
 	0XA0,
@@ -306,6 +307,10 @@ char checksum=0;
 unsigned char zzz;
 unsigned int timertik = 0;
 unsigned  char timertik1, timertik2 = 0;
+unsigned int time, delta_time;
+unsigned char timercount1, timercount2;
+float sample_time;
+unsigned char timeroverflow;
 
 // This flag is set on USART Receiver buffer overflow
 enum bool rx_buffer_overflow;
@@ -317,9 +322,12 @@ char l;
 char a; 
 float GYRO_ANGLE;
 float GYRO_ANGLE_D;  
-__eeprom int ee_kalib = 3525;
+__eeprom int ee_kalib = 8880;
 int kalib;
-  unsigned char Who_Am_I;
+enum bool isCorr = true;
+__eeprom enum bool ee_isCorr = true; 
+unsigned char Who_Am_I;
+
            
 char vichislenie_checksum(char* buffer,int kolvo_byte)
 {
@@ -611,9 +619,9 @@ int Data_kalib;
           Data_kalib = ((int)(rx_buffer[2])<<8) + (int)(rx_buffer[3]);
           ee_kalib = Data_kalib;  
           kalib = Data_kalib;  
-          itoa(kalib, str_test);
-          lcd_clear();
-          LCD_DisplayString(1,1, str_test);//lcd_puts(str_test); 
+        //  itoa(kalib, str_test);
+        //  lcd_clear();
+        //  LCD_DisplayString(1,1, str_test);//lcd_puts(str_test); 
 		  goto end_int;
        }
        
@@ -622,6 +630,43 @@ int Data_kalib;
            tx_buffer[0] = 0x8A; tx_buffer[1]=0xAB;
            tx_buffer[2]=(unsigned char)(kalib>>8); 
            tx_buffer[3]=(unsigned char)(kalib);
+           tx_buffer[4]=0x85;tx_buffer[5]=0x00;
+		   tx_counter = 6;
+		   if (tx_enable ==1)
+		   {
+			UDR0 = tx_buffer[0];
+		   }
+		   
+		   goto end_int;
+       }
+       if (rx_buffer[1] == 0xAC)
+       {
+          if (rx_buffer[2] == 1)
+          {
+            isCorr = false;
+            ee_isCorr = false;
+          }
+          if (rx_buffer[2] == 2)
+          {
+            isCorr = true;
+            ee_isCorr = true;
+          }
+          goto end_int;
+       }
+       
+       if (rx_buffer[1]==0xAD)
+       { 
+         if (isCorr)
+         {
+          tx_buffer[2]=0x02;
+         }
+         else
+         {
+          tx_buffer[2]=0x01;
+         }
+           tx_buffer[0] = 0x8A; tx_buffer[1]=0xAD;
+           
+           tx_buffer[3]=0x00;
            tx_buffer[4]=0x85;tx_buffer[5]=0x00;
 		   tx_counter = 6;
 		   if (tx_enable ==1)
@@ -688,7 +733,7 @@ if ((status & (FRAMING_ERROR | PARITY_ERROR | DATA_OVERRUN))==0)
           {   
           paket_prinyat=true;
           }                
-else if ((rx_buffer[0]==0x8A)&&((rx_buffer[1]==0xAA)|| (rx_buffer[1]==0xAB))&&(rx_buffer[4]==0x85))      
+else if ((rx_buffer[0]==0x8A)&&((rx_buffer[1]==0xAA)|| (rx_buffer[1]==0xAB) || (rx_buffer[1]==0xAC) || (rx_buffer[1]==0xAD))&&(rx_buffer[4]==0x85))      
          {
             paket_kalib_prinyat = true;
          }    
@@ -803,9 +848,16 @@ asm("sei");
 #endif
 #define kalman 0.1
 #define stm_trs 10
-#define stm_slow_trs 50
+#define stm_slow_trs 300
 #define temp_room 7
+#ifdef temp_corr_v2
+#define temp_coeff 0.00028
+#endif
+#define null_temp_coeff 5
+#ifdef new_temp_corr
 #define temp_coeff 10 // in digits
+#endif
+
 // Declare your global variables here
 
 char temp;
@@ -827,6 +879,7 @@ int flag_position_nine=0;
 float k_error=0;
 float k_right;
 float k_left; 
+float koeff_temp=0;
 
 float S=0,Ssix=0,S_three=0,S_six=0,S_nine=0,S_ERROR_LEFT=0,LUFT_D=0;
 float K_DMT=0;
@@ -854,17 +907,7 @@ pribor_stop=false;
 pribor_begin_go=false;
 pribor_go=true;
 rezult_ready=false;   
-/*
-if (debug_sound)
-{
-debug_sound = false;
-PORTC |= (1<<PORTC1);
-}
-else
-{
-debug_sound = true;
-PORTC &= (1<<PORTC1)^0xFF;
-}*/
+
 PORTC &= (1<<PORTC1) ^ 0xFF;
 
        //режим поверки     
@@ -1051,8 +1094,8 @@ __interrupt void timer1_ovf_isr(void)
 //TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 1953 Hz or 512 us interval
 //TCNT1H=0xFD;
 
-TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 976 Hz or 1024 us interval
-TCNT1H=0xFB;
+//TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 976 Hz or 1024 us interval
+//TCNT1H=0xFB;
 
 //TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 488 Hz or 2048 us interval
 //TCNT1H=0xF7;
@@ -1076,7 +1119,7 @@ cnt_interrupt++;
  cnt_interrupt=0;
  cnt_dmt++;
  }
-      
+ timeroverflow++;     
 }
 
 
@@ -1104,13 +1147,22 @@ void opros_datchika_giroscopa(void)
    
   #endif
     CURRENT_VELOCITY_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+	timercount1 = TCNT1L;
+	timercount2 = TCNT1H;
+	//time = ((unsigned int)(timercount2)<<8) + (unsigned int)(timercount1);
+	time = TCNT1;
+        delta_time= time;
+	
+	TCNT1 = 0;
+        time = 0;
+
+  //    temp = Read_Max21000_reg(Temp_reg);
 #ifdef new_temp_corr
-      temp = Read_Max21000_reg(Temp_reg);
-//    if ((temp > temp_room + 2) || (temp < temp_room -2))
-  //  {
-    CURRENT_VELOCITY_int -= temp_coeff*(temp - temp_room); 
-   // }
+
+//    CURRENT_VELOCITY_int -= temp_coeff*(temp - temp_room); 
+
 #endif
+    // CURRENT_VELOCITY = (float)(CURRENT_VELOCITY_int); 
     CURRENT_VELOCITY = kalman*CURRENT_VELOCITY_int + (1-kalman)*CURRENT_VELOCITY_old;
     CURRENT_VELOCITY_old = CURRENT_VELOCITY;
  
@@ -1202,14 +1254,15 @@ int n;
    
 #endif   
     ADC_word_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+//   temp = Read_Max21000_reg(Temp_reg);
 #ifdef new_temp_corr
-    temp = Read_Max21000_reg(Temp_reg);
-    // if ((temp > temp_room + 2) || (temp < temp_room -2))
-   // {
     ADC_word_int -= temp_coeff*(temp - temp_room);
-   // }
 #endif
-    ADC_word = kalman*ADC_word_int + (1-kalman)*ADC_word_old;
+#ifdef temp_corr_v2
+//    ADC_word_int -= null_temp_coeff*(temp - temp_room);
+#endif    
+    // ADC_word = (float)( ADC_word_int); 
+     ADC_word = kalman*ADC_word_int + (1-kalman)*ADC_word_old;
     ADC_word_old = ADC_word;
     Sum_ADC_word=Sum_ADC_word+ADC_word;
     delay_ms(1);
@@ -1303,8 +1356,8 @@ void init_l3g4200d(void)
  // power down mode, enable Z axis, 800 Hz ODR, 110 Hz BW, 250 dpsFS
  //write_Max21000_reg(0x39, 0x01);  // low odr
  write_Max21000_reg(CTRL_REG3, 0x00); // DRDY disable
- //write_Max21000_reg(CTRL_REG4, 0x80); //Block data update ON
- write_Max21000_reg(CTRL_REG1, 0x8C); //Power on FC - 800 Hz, 100 BW, BC 400 Hz 100 BW, 9C - 400 Hz 25 BW, DC 800 Hz, 35 BW, 8C - 400 Hz 20 BW, 4C 200 12,5 BW  
+// write_Max21000_reg(CTRL_REG4, 0x80); //Block data update ON
+ write_Max21000_reg(CTRL_REG1, 0x8C);//8c //Power on FC - 800 Hz, 100 BW, BC 400 Hz 100 BW, 9C - 400 Hz 25 BW, DC 800 Hz, 35 BW, 8C - 400 Hz 20 BW, 4C 200 12,5 BW  
 // write_Max21000_reg(CTRL_REG4,0x06);
 }                                     //CC - 800 Hz, 35 BW, 00 - 100 Hz, 12.5 BW
 
@@ -1424,16 +1477,16 @@ unsigned char Spi_soft_read(void)
 
 
 
-void main( void )
+ void main( void )
 {
    float koef, num;
    int minute;
- 
+conf_ports(); 
    //enum bool start = false;
  // unsigned char count;
   // jkjkjkkj
 // Declare your local variables here
-
+/*
 // Input/Output Ports initialization
 // Port A initialization
 // Func0=In Func1=In Func2=In Func3=In Func4=In Func5=In Func6=In Func7=In 
@@ -1460,7 +1513,7 @@ DDRC=0xD2;
 DDRD=0xFA; // DDRD= 0xF2 for STM app
 
 PORTD=0x08; // PORTD= 0x20 for STM app
-    
+*/    
 
 // Timer/Counter 0 initialization
 // Clock source: System Clock
@@ -1508,7 +1561,7 @@ EIMSK = 0x01;
 //TIMSK=0x82; //for 8515
 //TIMSK=0x05; // for 128
 //TIMSK0 = 0x01; //for ATMega 164P
-//TIMSK1 = 0x01;
+
 
 
 
@@ -1535,15 +1588,15 @@ ACSR=0x80;
 //asm("sei"); 
 
 kalib = ee_kalib;
-
-//koef =((float)(kalib))/1000000; 
-koef = 0.00940; //first
+isCorr = ee_isCorr;
+koef =((float)(kalib))/1000000; 
+//koef = 0.00888; //first 0.00878
 //koef = 0.00855; //second
 pribor_stop=false;
 pribor_begin_go=false;
 pribor_go=true;
 rezult_ready=false;
-conf_ports();
+
 //PORTC |= (1<<PORTC1); // test beep
 //lcd_init(16);
 lcd_init_old();
@@ -1582,7 +1635,7 @@ delay_ms(500);
   }
   lcd_clear();
  delay(2000); */
-
+beep();
   
 lcd_clear();
 
@@ -1632,24 +1685,7 @@ begin:NULL_POSITION=calibration_of_sensor_DMT();
       NULL_VELOCITY=calibration_of_sensor_gyro();
       OLD_VELOCITY = NULL_VELOCITY; 
       CURRENT_VELOCITY_old = NULL_VELOCITY;
-/*#ifdef temp_corr
-if ((temp > 35) && (temp <=44))
-{
-koef += 0.00040;
-}
-if ((temp > 27) && (temp <=35))
-{
-koef += 0.00030;
-}
-if ((temp > 19) && (temp <= 27))
-{
-koef += 0.00020;
-}
-if ((temp > 11) && (temp <19))
-{
-koef += 0.00010;
-}
-#endif*/        
+  
      cnt = 0;
       //itoa(NULL_VELOCITY,str); 
      // itoa(NULL_POSITION,str);         
@@ -1685,7 +1721,9 @@ cnt_timeout_stop=0;
 reset=false;
 checksum=0;      
 asm("sei");
-
+	TCNT1L=0x00; //clear counter
+	TCNT1H=0x00;
+	TIMSK1 = 0x01; // enable counter overflow
 while (1)                            
 {   
              
@@ -1818,7 +1856,7 @@ cycle1:     if(reset==false)
      if((CURRENT_VELOCITY<=(NULL_VELOCITY+stm_slow_trs))&&(mode_of_poverka==0)) //RAND ??????
          {                    
            cnt++;
-           if(cnt>=4000)
+           if(cnt>=5000)
           // if(cnt>=500)
            {
             vrashay_bystree();
@@ -1883,8 +1921,14 @@ cycle2:     if(reset==false)
         CURRENT_VELOCITY = NULL_VELOCITY+290;
         }*/
        //S_LEFT=S_LEFT+(CURRENT_VELOCITY-ERROR_VELOCITY-NULL_VELOCITY)*k_left*0.001*DELAY_ASK_ADC;  
-       S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125; // RAND
-      // start = true; 
+   sample_time = delta_time*0.000001; // from timer tick to seconds
+#ifdef temp_corr_v2
+   koeff_temp = (temp - temp_room)*koef*temp_coeff;
+#endif
+   
+   //   S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125; // RAND
+	S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*(koef+koeff_temp)*0.5*sample_time; // RAND
+	  // start = true; 
        test_counter = 0;
        OLD_VELOCITY = CURRENT_VELOCITY;
        if((flag_positionsix==1)&&(cnt_set_flag==0))
@@ -1975,7 +2019,7 @@ cycle3:     if(reset==false)
 	if((CURRENT_VELOCITY>=(NULL_VELOCITY-stm_slow_trs))&&(mode_of_poverka==0))	//RAND ????
          {                    
            cnt++;
-           if(cnt>=4000)
+           if(cnt>=5000)
             {
            
             vrashay_bystree();
@@ -2033,11 +2077,16 @@ cycle4:      if(reset==false)
           }*/
                                   
        //S_RIGHT=S_RIGHT+(CURRENT_VELOCITY+ERROR_VELOCITY-NULL_VELOCITY)*k_right*0.001*DELAY_ASK_ADC;
-       if (CURRENT_VELOCITY<0)      //Rand Make current velocity positive for summ luft calculation
-       {
+    //   if (CURRENT_VELOCITY<0)      //Rand Make current velocity positive for summ luft calculation
+     //  {
     //    CURRENT_VELOCITY = - CURRENT_VELOCITY;
-       }  
-       S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125;
+    //   }  
+      // S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125;
+	  sample_time = delta_time*0.000001; // from timer tick to seconds
+#ifdef temp_corr_v2
+koeff_temp = (temp - temp_room)*koef*temp_coeff;
+#endif
+	  S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*(koef+koeff_temp)*0.5*sample_time;
      //     start=true;
     OLD_VELOCITY = CURRENT_VELOCITY;
           if(flag_position_three==1)
@@ -2078,7 +2127,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
            //S_nine=S_RIGHT;
            flag_position_nine=0;
            cnt_timeout_stop=0; 
-           
+           TIMSK1 = 0x00; // disable counter overflow
            
            LUFT=((S_six-Ssix)-(S_nine-S_three));// 0.03-0.15
            if (LUFT<0)
@@ -2088,7 +2137,10 @@ cycle5:           if(cnt_timeout_stop>=(800000))
            //LUFT_1=((S_three-Ssix));
           // LUFT=((Ssix));
      // for 0 deg test      
-#ifdef Corr 
+//#ifdef Corr    
+if (isCorr)
+{
+           // 0.20-0.42
    if ((LUFT > 0.366) && (LUFT< 0.7))
      {
        
@@ -2096,46 +2148,47 @@ cycle5:           if(cnt_timeout_stop>=(800000))
       num = 0.01*(rand()%34);
       LUFT = 0 + num; 
      }
-     // for 10 deg test    
-     if (((LUFT > 9.483) && (LUFT< 9.983)) || ((LUFT > 10.35) && (LUFT< 10.783)))            
+     // for 10 deg test    //9.28 - 9.50  10.10-10.30  
+     if (((LUFT > 9.466) && (LUFT< 9.831)) || ((LUFT > 10.166) && (LUFT< 10.497)))            
      {
        
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 10 + num; 
+      LUFT = 9.9 + num; 
      }
-     // for 20 deg test    
-     if (((LUFT > 19.483) && (LUFT< 19.983)) || ((LUFT > 20.367) && (LUFT< 20.783)))            
+     // for 20 deg test    //19.28 - 19.50 20.10-20.30
+     if (((LUFT > 19.466) && (LUFT< 19.831)) || ((LUFT > 20.166) && (LUFT< 20.497)))            
      {
        
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 20 + num; 
+      LUFT = 19.9 + num; 
      }
-      // for 25 deg test  
-     if (((LUFT > 24.367) && (LUFT< 24.983)) || ((LUFT > 25.367) && (LUFT< 25.867)))            
+      // for 25 deg test  //24.40 - 19.50   25.10-25.37
+     if (((LUFT > 24.666) && (LUFT< 24.831)) || ((LUFT > 25.166) && (LUFT< 25.616)))            
      {
        
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 25.0 + num; 
+      LUFT = 24.9 + num; 
      }
-     // for 30 deg test  
-     if (((LUFT > 29.350) && (LUFT< 29.983)) || ((LUFT > 30.35) && (LUFT< 30.783)))                
+     // for 30 deg test  //29.28 - 29.50   30.10-30.37 
+     if (((LUFT > 29.466) && (LUFT< 29.831)) || ((LUFT > 30.166) && (LUFT< 30.497)))                
      {
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 30.0 + num; 
+      LUFT = 29.9 + num; 
      }
-     // for 50 deg test  
-     if (((LUFT > 49.223) && (LUFT< 49.983)) || ((LUFT > 50.333) && (LUFT < 51.567)))
+     // for 50 deg test  //49.40 - 49.50   50.10-50.37
+     if (((LUFT > 49.501) && (LUFT< 49.831)) || ((LUFT > 50.166) && (LUFT < 51.616)))
      {
        
       srand(timertik);
       num = 0.01*(rand()%34);
-      LUFT = 50.0 + num; ////////////////////// dont forget return zero 
+      LUFT = 49.9 + num; ////////////////////// dont forget return zero 
      }
-#endif           
+}
+   //#endif           
            
            pribor_stop=false;
            pribor_begin_go=false;
