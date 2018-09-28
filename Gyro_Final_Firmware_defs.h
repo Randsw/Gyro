@@ -101,3 +101,5 @@ void  conf_ports(void);
 void delay(long delay_cycles);
 unsigned char ftoa(float fnum, unsigned char *str);
 void mystrcpy(unsigned char *dst, unsigned char *src);
+unsigned int Read_spi_MCP3201(void);
+unsigned int Spi_soft_read_12bit(void);

@@ -325,7 +325,7 @@ float GYRO_ANGLE_D;
 __eeprom int ee_kalib = 8880;
 int kalib;
 enum bool isCorr = true;
-__eeprom enum bool ee_isCorr = true; 
+__eeprom enum bool ee_isCorr = false; 
 unsigned char Who_Am_I;
 
            
@@ -897,6 +897,8 @@ char* addr=0;
 int cnt_test_off = 0;
 enum bool debug_sound = false;
 
+int CURRENT_VELOCITY_min = 2020;
+int CURRENT_VELOCITY_max = 2020;
 void obrabotchik_knopki(void)
 {
 cnt_interrupt_INT0++; 
@@ -1069,11 +1071,11 @@ __interrupt void timer0_ovf_isr(void)
 {
  
 // Reinitialize Timer 0 value
-//TCNT0=0xF3;//0xD0;
-  TCNT0=0xC0;//0xD0; prescaller 1/64, 63 tick, 2000 Hz
+TCNT0=0xF3;//0xD0;
+//  TCNT0=0xC0;//0xD0; prescaller 1/64, 63 tick, 2000 Hz
 //    TCNT0=0xDF;//0xD0; prescaller 1/64, 32 tick, 4000 Hz
 // Place your code here
- flag_interrupt_DMT=1;
+// flag_interrupt_DMT=1;
  //     opros_datchika_DMT();
  if(timeout) timeout--;
     if(timeout==1) 
@@ -1091,8 +1093,8 @@ __interrupt void timer1_ovf_isr(void)
 {   
 //#ifdef Max21000
 // Reinitialize Timer 1 value
-//TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 1953 Hz or 512 us interval
-//TCNT1H=0xFD;
+TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 1953 Hz or 512 us interval
+TCNT1H=0xFD;
 
 //TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 976 Hz or 1024 us interval
 //TCNT1H=0xFB;
@@ -1113,59 +1115,67 @@ flag_interrupt_gyro=1;
 cnt_interrupt++;
  if(cnt_interrupt==1)
  { 
- /*flag_interrupt_DMT=1;
- opros_datchika_DMT();
- flag_interrupt_DMT=0;*/
+ flag_interrupt_DMT=1;
+ //opros_datchika_DMT();
+ //flag_interrupt_DMT=0;
  cnt_interrupt=0;
- cnt_dmt++;
+ //cnt_dmt++;
  }
- timeroverflow++;     
+ //timeroverflow++;     
 }
 
 
 
 void opros_datchika_giroscopa(void)    
     
-
 //PULSE; 
  {
-   unsigned char X_H, X_L;
-   #ifdef Max21000
+   
+ /*  unsigned char X_H, X_L;
+       #ifdef Max21000
    while(Read_Max21000_reg(0x22) == 0x00); // wait data ready
     X_H = Read_Max21000_reg(0x27);
     X_L = Read_Max21000_reg(0x28);
   #else
- //   opros_datchika_DMT();
-    do 
+//  
+    do
     {
-    zzz = Read_Max21000_reg(Status);
-    opros_datchika_DMT();  
+    zzz = Read_Max21000_reg(Status);  
+ //   while(!(Read_Max21000_reg(0x27)&(1<<2))); // wait data ready
+    if (!(zzz & (1<<2)))
+    {
+    //  LCD_DisplayString (2, 1 , "FUCK");
+      
+      zzzz++;
     }
-    while (!(zzz & (1<<2)));
+    }
+    while(!(zzz & (1<<2))); // wait data ready
      X_L = Read_Max21000_reg(Z_low);
      X_H = Read_Max21000_reg(Z_high);
    
+    
   #endif
+       
     CURRENT_VELOCITY_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
-	timercount1 = TCNT1L;
-	timercount2 = TCNT1H;
-	//time = ((unsigned int)(timercount2)<<8) + (unsigned int)(timercount1);
-	time = TCNT1;
-        delta_time= time;
-	
-	TCNT1 = 0;
-        time = 0;
+	*/
+    CURRENT_VELOCITY_int = Read_spi_MCP3201();
+    CURRENT_VELOCITY = CURRENT_VELOCITY_int;
+/*
+    if (CURRENT_VELOCITY < CURRENT_VELOCITY_min)
+    {
+      CURRENT_VELOCITY_min = CURRENT_VELOCITY;
+    }
+    
+    
+    if (CURRENT_VELOCITY > CURRENT_VELOCITY_max)
+    {
+      CURRENT_VELOCITY_max = CURRENT_VELOCITY;
+    }*/
+    //CURRENT_VELOCITY = kalman*CURRENT_VELOCITY_int + (1-kalman)*CURRENT_VELOCITY_old;
 
-  //    temp = Read_Max21000_reg(Temp_reg);
-#ifdef new_temp_corr
-
-//    CURRENT_VELOCITY_int -= temp_coeff*(temp - temp_room); 
-
-#endif
-    // CURRENT_VELOCITY = (float)(CURRENT_VELOCITY_int); 
-    CURRENT_VELOCITY = kalman*CURRENT_VELOCITY_int + (1-kalman)*CURRENT_VELOCITY_old;
-    CURRENT_VELOCITY_old = CURRENT_VELOCITY;
- 
+    //CURRENT_VELOCITY_old = CURRENT_VELOCITY;
+    
+    //    CURRENT_VELOCITY = CURRENT_VELOCITY>>0; //???????  
       /*      // Place your code here  
           
        // чтение 12-разрядного слова      
@@ -1204,8 +1214,12 @@ void opros_datchika_giroscopa(void)
        }  
                                       
       CURRENT_VELOCITY=ADC_12_bit_word1>>1;  
-     // PORTB.1=1; //CS1 подняли в единицу  
-      PORTB |=(1<<PORTB1);*/                                 
+
+    
+    
+    
+    // PORTB.1=1; //CS1 подняли в единицу  
+      PORTB |=(1<<PORTB1);                                 
       
       
     /* if(paket_prinyat==1)
@@ -1217,59 +1231,97 @@ void opros_datchika_giroscopa(void)
        tx_enable=1;
        paket_prinyat=0;   
        }
-     }*/ 
+     }*/  
    
 }
 
 float calibration_of_sensor_gyro(void)                 
 {
 int ADC_word_int;
-float ADC_word, ADC_word_old=0;
+ float ADC_word, ADC_word_old=0;
 //unsigned int array_ADC_word[1000]={0};  
+//long int Sum_ADC_word;
 float Sum_ADC_word;
 float Average_ADC_word;
 int n;    
-//int n_adc;                
+int n_adc;  
+unsigned char zzz;
                               
   Sum_ADC_word=0;
   Average_ADC_word=0;         
-
-  
-  for(n=0;n<100;n++) 
+   ADC_word_old = 0;
+  ADC_word_int = 0;
+  for(n=0;n<200;n++) 
     {
     ADC_word=0;
-    unsigned char X_H, X_L;
-#ifdef Max21000
+/*    unsigned char X_H, X_L;
+    #ifdef Max21000
     while(Read_Max21000_reg(0x22) == 0x00); // wait data ready
     X_H = Read_Max21000_reg(0x27);
     X_L = Read_Max21000_reg(0x28);
 #else
-    do 
+//    zzz = Read_Max21000_reg(0x27);
+    //while(!(Read_Max21000_reg(0x27)&(1<<2))); // wait data ready
+    do
     {
-    zzz = Read_Max21000_reg(Status);
+    zzz = Read_Max21000_reg(Status);  
     }
-    while (!(zzz & (1<<2)));
+    while(!(zzz & (1<<2)));
      X_L = Read_Max21000_reg(Z_low);
      X_H = Read_Max21000_reg(Z_high);
    
 #endif   
-    ADC_word_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
-//   temp = Read_Max21000_reg(Temp_reg);
-#ifdef new_temp_corr
-    ADC_word_int -= temp_coeff*(temp - temp_room);
-#endif
-#ifdef temp_corr_v2
-//    ADC_word_int -= null_temp_coeff*(temp - temp_room);
-#endif    
-    // ADC_word = (float)( ADC_word_int); 
-     ADC_word = kalman*ADC_word_int + (1-kalman)*ADC_word_old;
-    ADC_word_old = ADC_word;
+ //   ADC_word = (int)((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));
+    ADC_word_int =(int) ((unsigned int)(X_H)<<8) + ((unsigned int)(X_L));*/
+    ADC_word_int = Read_spi_MCP3201();
+    ADC_word = ADC_word_int;
+	
+	//ADC_word = kalman*ADC_word_int + (1-kalman)*ADC_word_old;
+    //ADC_word_old = ADC_word;
+    
+    
     Sum_ADC_word=Sum_ADC_word+ADC_word;
-    delay_ms(1);
+  /*   // PORTB.1=0; //CS сбросили в ноль      
+     PORTB &= (1<<PORTB1)^0xFF;
+      
+      CLK_READ_UP1;
+      CLK_READ_DOWN1;
+      CLK_READ_UP1;
+      CLK_READ_DOWN1;
+      CLK_READ_UP1;
+      CLK_READ_DOWN1;//ждем гогтовность АЦП           
+          
+      ADC_word=0;
+                   //считываем 12-битный последовательный код  с АЦП
+      for(n_adc=0;n_adc<12;n_adc++)
+       {   
+        
+        CLK_READ_UP1; 
+        //if(PINB.2==0)
+        if (!(PINB&(1<<PINB2)))
+        { 
+        ADC_word=ADC_word<<1;                      
+        } 
+        else
+        { 
+         ADC_word=(ADC_word+1)<<1;   
+        // PULSE;
+        } 
+                     
+        CLK_READ_DOWN1;    
+       }          
+                                
+      ADC_word=ADC_word>>1; 
+     // array_ADC_word[n]=ADC_word;
+      Sum_ADC_word=Sum_ADC_word+ADC_word;
+      
+      //PORTB.1=1; //CS подняли в единицу      
+      PORTB |=(1<<PORTB1);
+      */
+    delay_ms(3);
     }  
-    Average_ADC_word=Sum_ADC_word/100;  //усреднили ноль гироскопа по 1000 отсчетам
+    Average_ADC_word=Sum_ADC_word/200;  //усреднили ноль гироскопа по 1000 отсчетам
     return(Average_ADC_word);
-  
 } 
 
 unsigned int calibration_of_sensor_DMT(void)                 
@@ -1475,7 +1527,52 @@ unsigned char Spi_soft_read(void)
   return result;
 }
 
+unsigned int Read_spi_MCP3201(void)
+{
+	unsigned int result;
+	SPI_PORT &= (1 << SPI_CS) ^ 0xFF;
+	
+	//3 dumb clk cycles
+	 
+	SPI_PORT &= (1 << SPI_SCK) ^ 0xFF;
+    SPI_PORT |= (1 << SPI_SCK);
+	delay(1);
+	SPI_PORT &= (1 << SPI_SCK) ^ 0xFF;
+	SPI_PORT |= (1 << SPI_SCK);
+	delay(1);
+	SPI_PORT &= (1 << SPI_SCK) ^ 0xFF;
+	SPI_PORT |= (1 << SPI_SCK);
+	delay(1);
+	SPI_PORT &= (1 << SPI_SCK) ^ 0xFF;
+	
+	result = Spi_soft_read_12bit();
+	
+	
+	SPI_PORT |= (1 << SPI_CS);
+	
+	return result;
+} 
 
+unsigned int Spi_soft_read_12bit(void)
+{
+  unsigned int result = 0;
+  unsigned char k;
+  
+  for (k=0; k<12; k++)
+  {
+    SPI_PORT &= (1 << SPI_SCK) ^ 0xFF;
+    delay(1);
+    SPI_PORT |= (1 << SPI_SCK);
+    result <<= 1;
+    if (SPI_PIN & (1<<SPI_SDO))
+    {
+      result |= 0x01;
+    }
+    delay(1);
+  }
+  SPI_PORT &= (1 << SPI_SCK) ^ 0xFF;
+  return result;
+}
 
  void main( void )
 {
@@ -1560,8 +1657,8 @@ EIMSK = 0x01;
 // Timer(s)/Counter(s) Interrupt(s) initialization
 //TIMSK=0x82; //for 8515
 //TIMSK=0x05; // for 128
-//TIMSK0 = 0x01; //for ATMega 164P
-
+TIMSK0 = 0x00; //for ATMega 164P
+TIMSK1 = 0x01; //for ATMega 164P
 
 
 
@@ -1588,7 +1685,8 @@ ACSR=0x80;
 //asm("sei"); 
 
 kalib = ee_kalib;
-isCorr = ee_isCorr;
+//isCorr = ee_isCorr;
+isCorr = false;
 koef =((float)(kalib))/1000000; 
 //koef = 0.00888; //first 0.00878
 //koef = 0.00855; //second
@@ -1603,7 +1701,7 @@ lcd_init_old();
 //_lcd_ready();
 delay_ms(500);
 
-#ifdef Max21000
+/*#ifdef Max21000
   init_Max21000();
   Who_Am_I = Read_Max21000_reg(0x20);
   if (Who_Am_I != 0xb1)
@@ -1627,7 +1725,7 @@ delay_ms(500);
     delay_ms(2000);
     PORTD |= (1<<PORTD6);
   }
-#endif
+#endif*/
 /*  Who_Am_I = Read_Max21000_reg(0x20);
   if (Who_Am_I != 0xb1)
   {
@@ -1675,16 +1773,18 @@ k_error=22.625;*/
        PORTD |= (1<<PORTD6); 
        }
       // temp test
-lcd_clear();
+/*lcd_clear();
 temp = Read_Max21000_reg(Temp_reg);    
 itoa(temp ,str_sum);
 LCD_DisplayString(2,3, str_sum);
-delay_ms(2000);
+delay_ms(2000);*/
 
-begin:NULL_POSITION=calibration_of_sensor_DMT();
+begin:TCNT1L=0x00; 
+      TCNT1H=0x00;
+      NULL_POSITION=calibration_of_sensor_DMT();
       NULL_VELOCITY=calibration_of_sensor_gyro();
-      OLD_VELOCITY = NULL_VELOCITY; 
-      CURRENT_VELOCITY_old = NULL_VELOCITY;
+    //  OLD_VELOCITY = NULL_VELOCITY; 
+    //  CURRENT_VELOCITY_old = NULL_VELOCITY;
   
      cnt = 0;
       //itoa(NULL_VELOCITY,str); 
@@ -1721,9 +1821,9 @@ cnt_timeout_stop=0;
 reset=false;
 checksum=0;      
 asm("sei");
-	TCNT1L=0x00; //clear counter
-	TCNT1H=0x00;
-	TIMSK1 = 0x01; // enable counter overflow
+	//TCNT1L=0x00; //clear counter
+	//TCNT1H=0x00;
+	//TIMSK1 = 0x01; // enable counter overflow
 while (1)                            
 {   
              
@@ -1746,20 +1846,19 @@ while (1)
      flag_positionsix=0;flag_position_three=0;flag_position_six=0;flag_position_nine=0; 
      goto begin;
      }
-/*  if(flag_interrupt_DMT==1)
-      {
-         opros_datchika_DMT();
-         flag_interrupt_DMT=0;
-       } */
       // PULSE;  
-   // if(flag_interrupt_gyro==1)  //RAND MAIN CHANGE Dont USE Timer at GYRO
-    if (true) 
+    if(flag_interrupt_gyro==1)  //RAND MAIN CHANGE Dont USE Timer at GYRO
+   // if (true) 
     {  
+		opros_datchika_giroscopa();  
+		flag_interrupt_gyro =0;
       //  PULSE; 
      //  opros_datchika_DMT();
-      opros_datchika_DMT(); 
-       opros_datchika_giroscopa();  
-        flag_interrupt_gyro=0; 
+      if(flag_interrupt_DMT==1)
+         {
+         opros_datchika_DMT();
+         flag_interrupt_DMT=0;
+         }    
                 
         
       /*  itoa(CURRENT_VELOCITY,str);                
@@ -1770,12 +1869,12 @@ while (1)
         lcd_puts(str);
         delay_ms(1000);  */
 
-     //  if((CURRENT_VELOCITY<=(NULL_VELOCITY+3))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-3))) 
-	  #ifdef Max21000
+      if((CURRENT_VELOCITY<=(NULL_VELOCITY+5))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-5))) 
+	/*  #ifdef Max21000
 	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+80))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-80)))//Rand
 	  #else
 	  if((CURRENT_VELOCITY<=(NULL_VELOCITY+stm_trs))&&(CURRENT_VELOCITY>=(NULL_VELOCITY-stm_trs)))//Rand
-	  #endif
+	  #endif*/
        {   
                    
         LASTSTEP_VELOCITY=NULL_VELOCITY;  
@@ -1798,18 +1897,18 @@ while (1)
        }
 //}
      
-       //if(CURRENT_VELOCITY<(NULL_VELOCITY-3)) 
-	#ifdef Max21000    
+     if(CURRENT_VELOCITY<(NULL_VELOCITY-5)) 
+	/*#ifdef Max21000    
        if(CURRENT_VELOCITY>(NULL_VELOCITY+80))// RAND
        #else
        //if((CURRENT_VELOCITY>0) && (CURRENT_VELOCITY>(NULL_VELOCITY+stm_trs)))
          if((CURRENT_VELOCITY>(NULL_VELOCITY+stm_trs)))
-       #endif
+       #endif*/
        {     
          cnt_timeout_stop=0;  
          //Ограничение  максимальной скорости влево
-        // if((CURRENT_VELOCITY<=1050)&&(mode_of_poverka==0))
-	if((CURRENT_VELOCITY>=4500)&&(mode_of_poverka==0))	//RAND ??????
+     if((CURRENT_VELOCITY<=1750)&&(mode_of_poverka==0))
+	//if((CURRENT_VELOCITY>=4500)&&(mode_of_poverka==0))	//RAND ??????
          {
          vrashay_medlennee();
          delay_ms(2000);
@@ -1852,8 +1951,8 @@ cycle1:     if(reset==false)
        
          }
           //Ограничение  миимальной скорости влево
-         //if((CURRENT_VELOCITY>=(NULL_VELOCITY-25))&&(mode_of_poverka==0))
-     if((CURRENT_VELOCITY<=(NULL_VELOCITY+stm_slow_trs))&&(mode_of_poverka==0)) //RAND ??????
+         if((CURRENT_VELOCITY>=(NULL_VELOCITY-7))&&(mode_of_poverka==0))
+			// if((CURRENT_VELOCITY<=(NULL_VELOCITY+stm_slow_trs))&&(mode_of_poverka==0)) //RAND ??????
          {                    
            cnt++;
            if(cnt>=5000)
@@ -1921,16 +2020,17 @@ cycle2:     if(reset==false)
         CURRENT_VELOCITY = NULL_VELOCITY+290;
         }*/
        //S_LEFT=S_LEFT+(CURRENT_VELOCITY-ERROR_VELOCITY-NULL_VELOCITY)*k_left*0.001*DELAY_ASK_ADC;  
-   sample_time = delta_time*0.000001; // from timer tick to seconds
+   /*sample_time = delta_time*0.000001; // from timer tick to seconds
 #ifdef temp_corr_v2
    koeff_temp = (temp - temp_room)*koef*temp_coeff;
-#endif
+#endif*/
    
    //   S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125; // RAND
-	S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*(koef+koeff_temp)*0.5*sample_time; // RAND
+	//S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*(koef+koeff_temp)*0.5*sample_time; // RAND
 	  // start = true; 
-       test_counter = 0;
-       OLD_VELOCITY = CURRENT_VELOCITY;
+      // test_counter = 0;
+     //  OLD_VELOCITY = CURRENT_VELOCITY;
+S_LEFT=S_LEFT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.1740553*0.000512*1.63;
        if((flag_positionsix==1)&&(cnt_set_flag==0))
            {    
         //     start = false;
@@ -1943,9 +2043,9 @@ cycle2:     if(reset==false)
     //       lcd_clear();
            //lcd_puts(str_go_right); 
  //          str_right();
-           timertik1 = TCNT1H;
-           timertik2 = TCNT1L;
-           timertik = ((unsigned int)(timertik1)<<8) + (unsigned int)(timertik2);
+         //  timertik1 = TCNT1H;
+        //   timertik2 = TCNT1L;
+        //   timertik = ((unsigned int)(timertik1)<<8) + (unsigned int)(timertik2);
           LCD_Cursor (2, 7);
           LCD_DisplayCharacter(0xDA);
            
@@ -1960,18 +2060,18 @@ cycle2:     if(reset==false)
        }                                                
        
        
-       //if(CURRENT_VELOCITY>(NULL_VELOCITY+3))
-        #ifdef Max21000  	
+    if(CURRENT_VELOCITY>(NULL_VELOCITY+4))
+    /*    #ifdef Max21000  	
        if(CURRENT_VELOCITY<(NULL_VELOCITY-80))  //RAND 
       #else
         if(CURRENT_VELOCITY<(NULL_VELOCITY-stm_trs))  //RAND 
-      #endif    
+      #endif */   
        { 
           cnt_timeout_stop=0;
           PORTC &= (1<<PORTC1)^0xFF;//PORTC.1=0; //Rand                    
           //Ограничение  максимальной скорости вправо
-         //if((CURRENT_VELOCITY>=3050)&&(mode_of_poverka==0))
-    if((CURRENT_VELOCITY<=-4000)&&(mode_of_poverka==0)) //RAND ????
+      if((CURRENT_VELOCITY>=2350)&&(mode_of_poverka==0))
+		//if((CURRENT_VELOCITY<=-4000)&&(mode_of_poverka==0)) //RAND ????
          {
        
          vrashay_medlennee();
@@ -2015,8 +2115,8 @@ cycle3:     if(reset==false)
          } 
                       
          //Ограничение  миимальной скорости вправо
-        // if((CURRENT_VELOCITY<=(NULL_VELOCITY+25))&&(mode_of_poverka==0))
-	if((CURRENT_VELOCITY>=(NULL_VELOCITY-stm_slow_trs))&&(mode_of_poverka==0))	//RAND ????
+      if((CURRENT_VELOCITY<=(NULL_VELOCITY+7))&&(mode_of_poverka==0))
+			//if((CURRENT_VELOCITY>=(NULL_VELOCITY-stm_slow_trs))&&(mode_of_poverka==0))	//RAND ????
          {                    
            cnt++;
            if(cnt>=5000)
@@ -2082,13 +2182,14 @@ cycle4:      if(reset==false)
     //    CURRENT_VELOCITY = - CURRENT_VELOCITY;
     //   }  
       // S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*koef*0.00125;
-	  sample_time = delta_time*0.000001; // from timer tick to seconds
+/*	  sample_time = delta_time*0.000001; // from timer tick to seconds
 #ifdef temp_corr_v2
 koeff_temp = (temp - temp_room)*koef*temp_coeff;
 #endif
 	  S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY)+(OLD_VELOCITY-NULL_VELOCITY))*(koef+koeff_temp)*0.5*sample_time;
      //     start=true;
-    OLD_VELOCITY = CURRENT_VELOCITY;
+    OLD_VELOCITY = CURRENT_VELOCITY;*/
+	S_RIGHT=S_RIGHT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.1740553*0.000512*1.62; 
           if(flag_position_three==1)
            {
            S_three=S_LEFT+S_RIGHT;
@@ -2127,7 +2228,7 @@ cycle5:           if(cnt_timeout_stop>=(800000))
            //S_nine=S_RIGHT;
            flag_position_nine=0;
            cnt_timeout_stop=0; 
-           TIMSK1 = 0x00; // disable counter overflow
+          // TIMSK1 = 0x00; // disable counter overflow
            
            LUFT=((S_six-Ssix)-(S_nine-S_three));// 0.03-0.15
            if (LUFT<0)
