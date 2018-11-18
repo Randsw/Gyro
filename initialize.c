@@ -17,18 +17,6 @@ void  conf_ports(void)
 
   DDRB = 0x5B;
   PORTB = 0x02; //
-
-  
-
-  //DDRE = 0x9F;
- // DDRE = 0x04;
- // PORTE = 0x08;  // Pull-up pins
-
-//  DDRF  = 0xFB;
-//  PORTF = 0x08;
-
-//  DDRG  = 0x1F;
-//  PORTG = 0x06;
 }
   
   
