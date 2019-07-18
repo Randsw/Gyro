@@ -296,7 +296,7 @@ char l;
 char a; 
 float GYRO_ANGLE;
 float GYRO_ANGLE_D;  
-__eeprom int ee_kalib = 8880;
+__eeprom int ee_kalib = 5135;
 int kalib;
 enum bool isCorr = false;
 __eeprom enum bool ee_isCorr = false; 
@@ -526,9 +526,9 @@ int Data_kalib;
           Data_kalib = ((int)(rx_buffer[2])<<8) + (int)(rx_buffer[3]);
           ee_kalib = Data_kalib;  
           kalib = Data_kalib;  
-        //  itoa(kalib, str_test);
-        //  lcd_clear();
-        //  LCD_DisplayString(1,1, str_test);//lcd_puts(str_test); 
+          itoa(kalib, str_test);
+          lcd_clear();
+          LCD_DisplayString(1,1, str_test);//lcd_puts(str_test); 
 		  goto end_int;
        }
        
@@ -669,7 +669,7 @@ unsigned int  ADC_12_bit_word2;
 char temp;
 int CURRENT_VELOCITY_int;
 float CURRENT_VELOCITY=0;
-float NULL_VELOCITY;
+float NULL_VELOCITY,OLD_VELOCITY;
 int CURRENT_POSITION;
 int NULL_POSITION;
 int i,cnt_set_flag=0,cnt=0,cnt_interrupt=0,cnt_display=0, cnt_dmt=0;
@@ -808,7 +808,7 @@ void opros_datchika_DMT(void)
 		flag_position_six=0;
 		flag_position_nine=0;
       }                    
-      if((CURRENT_POSITION_FLOAT<=(-0.1147+0.0074))&&(CURRENT_POSITION_FLOAT>=(-0.1147-0.0074)) )
+    if((CURRENT_POSITION_FLOAT<=(-0.1147+0.0074))&&(CURRENT_POSITION_FLOAT>=(-0.1147-0.0074)) )
  //      if((CURRENT_POSITION_FLOAT<=(0.1147+2*POSITION_ERROR))&&(CURRENT_POSITION_FLOAT>=(0.1147-2*POSITION_ERROR)) )
       {
 		flag_positionsix=0;
@@ -817,15 +817,16 @@ void opros_datchika_DMT(void)
 		flag_position_nine=0;
       }   
       if((CURRENT_POSITION_FLOAT<=(-0.2109+0.0074))&&(CURRENT_POSITION_FLOAT>=(-0.2109-0.0074)) )
- //    if((CURRENT_POSITION_FLOAT<=(0.2109+2*POSITION_ERROR))&&(CURRENT_POSITION_FLOAT>=(0.2109-2*POSITION_ERROR)) )
+   //  if((CURRENT_POSITION_FLOAT<=(0.2109+2*POSITION_ERROR))&&(CURRENT_POSITION_FLOAT>=(0.2109-2*POSITION_ERROR)) )
       {
 		flag_positionsix=0;
 		flag_position_three=0;
 		flag_position_six=1;
 		flag_position_nine=0; 
       }
-  //   if((CURRENT_POSITION_FLOAT<=(0.4921+2*POSITION_ERROR))&&(CURRENT_POSITION_FLOAT>=(0.4921-2*POSITION_ERROR)) )//0.999 - 0.15,1.1988-0.18  
-      if((CURRENT_POSITION_FLOAT<=(-0.4921+0.0074))&&(CURRENT_POSITION_FLOAT>=(-0.4921-0.0074)) )//0.999 - 0.15,1.1988-0.18
+   if((CURRENT_POSITION_FLOAT<=(-0.4921+0.0074))&&(CURRENT_POSITION_FLOAT>=(-0.4921-0.0074)) )//0.999 - 0.15,1.1988-0.18 
+     //if((CURRENT_POSITION_FLOAT<=(0.4921+2*POSITION_ERROR))&&(CURRENT_POSITION_FLOAT>=(0.4921-2*POSITION_ERROR)) )//0.999 - 0.15,1.1988-0.18  
+      
       {
 		flag_positionsix=0;
 		flag_position_three=0;
@@ -855,8 +856,9 @@ __interrupt void timer1_ovf_isr(void)
 {   
 // Reinitialize Timer 1 value
 TCNT1L=0xFF; //at 1 MHz( 8 MHz/ 8 prescaler) we got 1953 Hz or 512 us interval
-//TCNT1H=0xFD;
-TCNT1H=0xFB;
+//TCNT1H=0xFD; 512 uS
+TCNT1H=0xFB; //1024 uS
+//TCNT1H=0xFC; // 768 uS
 cnt_timeout_stop++;
 cnt_display++;
 flag_interrupt_gyro=1; 
@@ -1118,7 +1120,8 @@ conf_ports();
 Periph_init();
 kalib = ee_kalib;
 isCorr = false;
-koef =((float)(kalib))/1000000; 
+//koef =((float)(kalib))/10000000; 
+koef = 0.0005140;
 pribor_stop=false;
 pribor_begin_go=false;
 pribor_go=true;
@@ -1149,7 +1152,7 @@ begin:TCNT1L=0x00;
 TCNT1H=0x00;
 NULL_POSITION=calibration_of_sensor_DMT();
 NULL_VELOCITY=calibration_of_sensor_gyro();
-
+OLD_VELOCITY = NULL_VELOCITY;
 cnt = 0;
 lcd_clear();                                           
 str_left();
@@ -1251,8 +1254,10 @@ cycle2:     			if(reset==false)
 				{
 					cnt=0;
 				} 
-				S_LEFT=S_LEFT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.1740553*0.000514*2;//000512
-				if ((flag_positionsix==1)&&(cnt_set_flag==0))
+				//S_LEFT=S_LEFT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.1740553*0.000514*1.5;//000512
+                                S_LEFT=S_LEFT+((CURRENT_VELOCITY-NULL_VELOCITY) + (OLD_VELOCITY-NULL_VELOCITY))*0.1740553*koef*2.0*0.5;//000512
+				OLD_VELOCITY = CURRENT_VELOCITY;
+                                if ((flag_positionsix==1)&&(cnt_set_flag==0))
 				{    
 					PORTC |= (1<<PORTC1);
 					cnt_set_flag=cnt_set_flag+1;
@@ -1325,8 +1330,10 @@ cycle4:      		if(reset==false)
 			{
 				cnt=0;
 			}  
-			S_RIGHT=S_RIGHT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.1740553*0.000514*2; //000512
-			if(flag_position_three==1)
+			//S_RIGHT=S_RIGHT+(CURRENT_VELOCITY-NULL_VELOCITY)*0.1740553*0.000514*1.5; //000512
+			S_RIGHT=S_RIGHT+((CURRENT_VELOCITY-NULL_VELOCITY) + (OLD_VELOCITY-NULL_VELOCITY))*0.1740553*koef*2.0*0.5;
+                        OLD_VELOCITY = CURRENT_VELOCITY;
+                        if(flag_position_three==1)
 			{
 				S_three=S_LEFT+S_RIGHT;
 				flag_position_three=0;

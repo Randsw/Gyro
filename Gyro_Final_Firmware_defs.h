@@ -2,7 +2,7 @@
 #define ENABLE_BIT_DEFINITIONS
 #endif
 
-#include "iom164pa.h"
+#include "ioavr.h"
 #include "intrinsics.h"
 #include "lcd_lib.h"
 #define F_CPU 8000000
