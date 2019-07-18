@@ -80,44 +80,7 @@ void lcd_init_old (void)
  // enter entry mode
   init_4_bit =0x06;
   putcmd (init_4_bit);
- 
-  
- /* //Interface is 8-bit Long
-  unsigned char init1 = 0x3C;
-  //wait 1,25 ms
-  delay(1000);
-  putcmd (init1);
-  // wait 125 ms
-  delay(100000);
-  //Interface 8 bit, 2-lines, 5x7 font
-  unsigned char init2 = 0x0f;
-  delay(1000);
-  putcmd (init2);
-  delay(100000);
-  //Display OFF
-  unsigned char init3 = 0x01;
-  delay(1000);
-  putcmd (init3);
-  delay(100000);
-  //Display ON, cursor OFF
-  unsigned char init4 = 0x06;
-  delay(1000);
-  putcmd (init4);
-  delay(100000);
-*/
 }
-/*
-void putchar (unsigned char data)
-{
-  LCD_CTRL_PORT |=(1<<LCD_RS);
-   LCD_CTRL_PORT &=(1<<LCD_RW)^0xFF;
-
-   //Load data to LCD
-   LCD_OP_PORT = data;
-   delay (100);
-   lcd_enable();
-   delay (100);
-}*/
 
 void putchar_LCD (unsigned char data)
 {
@@ -185,18 +148,6 @@ void putcmd_init (unsigned char cmd)
    lcd_enable();
     delay (200);
 }
-/*
-void putcmd (unsigned char cmd) //8 bit interface
-{
-   LCD_CTRL_PORT &=(1<<LCD_RS)^0xFF;
-   LCD_CTRL_PORT &=(1<<LCD_RW)^0xFF;
-
-   //Load data to LCD
-   LCD_OP_PORT = cmd;
-   delay (100);
-   lcd_enable();
-   delay (100);
-}*/
 
 void lcd_enable (void)
 {

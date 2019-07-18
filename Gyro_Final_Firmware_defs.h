@@ -2,10 +2,8 @@
 #define ENABLE_BIT_DEFINITIONS
 #endif
 
-#include "iom164p.h"
+#include "ioavr.h"
 #include "intrinsics.h"
-#include "MAX21000.h"
-#include "MAX21000_map.h"
 #include "lcd_lib.h"
 #define F_CPU 8000000
 
@@ -23,17 +21,7 @@
 #define SPI_SDI  PORTB3
 #define SPI_SDO  PINB2
 
-#define CTRL_REG1 0x20
-#define CTRL_REG3 0x22
-#define CTRL_REG4 0x23
-#define Who_am_I  0x0F
-#define Z_low     0x2C
-#define Z_high    0x2D
-#define Status    0x27
-
 enum bool {true = 1, false = 0};
-
-
 
 extern const  unsigned char   STR_CALIBRAT1[];
 extern const  unsigned char   STR_CALIBRAT2[];
@@ -87,16 +75,10 @@ void LCD_CommonFunc(unsigned char data);
 void LCD_DisplayString_new_SH (char row, char column ,const  unsigned char  *string);
 void LCD_DisplayCharacter_SH (char Char);
 
-void init_Max21000(void);
-void init_Max21000_test(void);
-void Change_Bank(unsigned char Bank_Num);
-void write_Max21000_reg (unsigned char address, unsigned char data);
-void write_mult_Max21000_reg (unsigned char address, unsigned char* data, unsigned char numdata);
-void read_mult_Max21000_reg (unsigned char address, unsigned char* data, unsigned char numdata);
-unsigned char Read_Max21000_reg (unsigned char address);
-void Spi_soft_write(unsigned char d);
-unsigned char Spi_soft_read(void);
 void  conf_ports(void);
 void delay(long delay_cycles);
-unsigned char ftoa(float fnum, unsigned char *str);
-void mystrcpy(unsigned char *dst, unsigned char *src);
+unsigned int Read_spi_MCP3201(void);
+unsigned int Spi_soft_read_12bit(void);
+void TooSlow(void);
+void TooFast(void);
+void All_clear_reset(void);
